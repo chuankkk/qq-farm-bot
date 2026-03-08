@@ -294,8 +294,7 @@ docker compose up -d --build
 - 部分功能：[QianChenJun/qq-farm-bot](https://github.com/QianChenJun/qq-farm-bot)
 - 扫码登录：[lkeme/QRLib](https://github.com/lkeme/QRLib)
 - 推送通知：[imaegoo/pushoo](https://github.com/imaegoo/pushoo)
-
----
+- WASM加密：[sulimu2/qq-farm-bot](https://github.com/sulimu2/qq-farm-bot)
 
 ## 免责声明
 
