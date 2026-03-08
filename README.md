@@ -30,7 +30,7 @@
 
 ### 多账号管理
 - 账号新增、编辑、删除、启动、停止
-- 扫码登录（QQ）与手动输入 Code
+- 扫码登录（QQ / 微信）与手动输入 Code
 - 账号被踢下线自动删除
 - 账号连续离线超时自动删除
 - 账号离线推送通知（支持 Bark、自定义 Webhook 等）
@@ -59,7 +59,10 @@
 ## 环境要求
 
 - 源码运行：Node.js 20+，pnpm（推荐通过 `corepack enable` 启用）
-- 二进制发布版：无需安装 Node.js
+- Docker 部署：Docker + Docker Compose（推荐，无需手动安装 Node.js）
+- 二进制发布版：无需任何运行时
+
+---
 
 ## 安装与启动（源码方式）
 
@@ -72,7 +75,7 @@ corepack enable
 pnpm -v
 
 # 2. 安装依赖并构建前端
-cd D:\Projects\qq-farm-bot-ui
+cd qq-farm-bot-ui
 pnpm install
 pnpm build:web
 
@@ -94,7 +97,7 @@ sudo apt install -y nodejs
 corepack enable
 
 # 2. 安装依赖并构建前端
-cd /path/to/qq-farm-bot-ui
+cd qq-farm-bot-ui
 pnpm install
 pnpm build:web
 
@@ -111,39 +114,78 @@ ADMIN_PASSWORD='你的强密码' pnpm dev:core
 
 ---
 
-## Docker 部署
+## Docker 部署（推荐）
+
+Docker Compose 包含三个服务：
+
+| 服务名 | 说明 | 默认端口 |
+|--------|------|---------|
+| `youxian-qq-farm-bot-ui` | 主服务（核心引擎 + Web 面板） | `8081` |
+| `youxian-ws-keeper` | QQ WebSocket 保活服务 | `4001` |
+| `youxian-ws-keeper-wx` | 微信 WebSocket 保活服务 | `4002` |
+
+### 快速启动
 
 ```bash
-# 构建并后台启动
+# 1. 克隆项目
+git clone https://github.com/你的用户名/qq-farm-bot-ui.git
+cd qq-farm-bot-ui
+
+# 2. 修改管理密码（重要！）
+# 编辑 docker-compose.yml，将 ADMIN_PASSWORD 改为你的强密码
+
+# 3. 构建并后台启动
 docker compose up -d --build
 
-# 查看日志
+# 4. 查看实时日志
 docker compose logs -f
 
-# 停止并移除容器
+# 5. 停止并移除容器
 docker compose down
 ```
 
-### 数据持久化
-
-`docker-compose.yml` 已将数据目录挂载：
-
-| 宿主机路径 | 容器内路径 |
-|-----------|-----------|
-| `./data`  | `/app/core/data` |
-
-账号与配置数据保存在 `./data/accounts.json` 和 `./data/store.json`。
+访问面板：`http://服务器IP:8081`
 
 ### 设置管理密码
 
 在 `docker-compose.yml` 的 `environment` 中配置：
 
 ```yaml
-environment:
-  ADMIN_PASSWORD: 你的强密码
+services:
+  youxian-qq-farm-bot-ui:
+    environment:
+      ADMIN_PASSWORD: 你的强密码   # 修改此处
 ```
 
 修改后执行 `docker compose up -d` 重启生效。
+
+### 数据持久化
+
+`docker-compose.yml` 已将数据目录挂载至宿主机：
+
+| 宿主机路径 | 容器内路径 | 说明 |
+|-----------|-----------|------|
+| `./data`  | `/app/core/data` | 账号、配置、运行数据 |
+
+账号与配置数据保存在：
+- `./data/accounts.json` — 账号列表
+- `./data/store.json` — 运行状态与配置
+
+### 容器常用命令
+
+```bash
+# 查看运行中的容器
+docker ps
+
+# 进入主容器 Shell
+docker exec -it youxian-qq-farm-bot-ui sh
+
+# 重启单个服务
+docker compose restart youxian-qq-farm-bot-ui
+
+# 拉取最新代码后重新构建
+git pull && docker compose up -d --build
+```
 
 ---
 
@@ -183,7 +225,8 @@ chmod +x ./qq-farm-bot-linux-x64 && ./qq-farm-bot-linux-x64
 
 - 面板首次访问需要登录
 - 默认管理密码：`admin`
-- **建议部署后立即修改为强密码**
+- **建议部署后立即修改为强密码**（通过环境变量 `ADMIN_PASSWORD` 设置）
+- 生产环境建议在面板前添加 Nginx 反向代理并配置 HTTPS
 
 ---
 
@@ -194,24 +237,53 @@ qq-farm-bot-ui/
 ├── core/                  # 后端（Node.js 机器人引擎）
 │   ├── src/
 │   │   ├── config/        # 配置管理
-│   │   ├── controllers/   # HTTP API
-│   │   ├── gameConfig/    # 游戏静态数据
-│   │   ├── models/        # 数据模型与持久化
+│   │   ├── controllers/   # HTTP API（账号、管理、日志等）
+│   │   ├── gameConfig/    # 游戏静态数据（作物、等级等 JSON）
+│   │   ├── models/        # 数据模型与持久化（accounts、store）
 │   │   ├── proto/         # Protobuf 协议定义
 │   │   ├── runtime/       # 运行时引擎与 Worker 管理
-│   │   └── services/      # 业务逻辑（农场、好友、任务等）
-│   ├── data/              # 运行时数据（accounts.json、store.json）
+│   │   └── services/      # 业务逻辑（农场、好友、任务、仓库等）
+│   ├── panel/             # 内嵌前端静态资源（build:web 产物）
+│   ├── Dockerfile
 │   └── client.js          # 主进程入口
 ├── web/                   # 前端（Vue 3 + Vite）
 │   ├── src/
-│   │   ├── api/           # API 客户端
-│   │   ├── components/    # Vue 组件
+│   │   ├── api/           # API 客户端（封装 fetch/axios）
+│   │   ├── components/    # 通用 Vue 组件
 │   │   ├── stores/        # Pinia 状态管理
-│   │   └── views/         # 页面视图
-│   └── dist/              # 构建产物
-├── docker-compose.yml
-├── pnpm-workspace.yaml
+│   │   └── views/         # 页面（概览/农场/背包/好友/分析/设置）
+│   └── vite.config.ts
+├── ws-keeper/             # WebSocket 保活中间层（QQ / 微信）
+│   ├── index.js           # 保活服务主逻辑
+│   ├── utils/             # 加密工具（crypto-wasm）
+│   └── Dockerfile
+├── sniff9988.py           # QQ 扫码登录回调抓取工具（开发辅助）
+├── docker-compose.yml     # Docker 一键部署配置
+├── pnpm-workspace.yaml    # pnpm monorepo 配置
 └── package.json
+```
+
+---
+
+## 常见问题
+
+**Q: 扫码后账号不上线？**
+
+确认 `youxian-ws-keeper` 容器正常运行，并检查端口 `4001` 是否在防火墙中放开。
+
+**Q: 面板无法访问？**
+
+检查 `docker compose ps` 中主服务状态是否为 `Up`，并确认服务器防火墙放开了 `8081` 端口。
+
+**Q: 数据丢失了？**
+
+`./data/` 目录挂载到宿主机，只要 `./data/accounts.json` 文件存在，数据就不会丢失。重建容器不会影响数据。
+
+**Q: 如何更新到最新版本？**
+
+```bash
+git pull
+docker compose up -d --build
 ```
 
 ---
@@ -222,6 +294,8 @@ qq-farm-bot-ui/
 - 部分功能：[QianChenJun/qq-farm-bot](https://github.com/QianChenJun/qq-farm-bot)
 - 扫码登录：[lkeme/QRLib](https://github.com/lkeme/QRLib)
 - 推送通知：[imaegoo/pushoo](https://github.com/imaegoo/pushoo)
+
+---
 
 ## 免责声明
 
